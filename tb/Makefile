@@ -3,7 +3,7 @@ SIM ?= icarus
 TOPLEVEL_LANG ?= verilog
 TOP ?= baud_gen
 
-VERILOG_SOURCES += $(PWD)/../rtl/$(TOP).v
+VERILOG_SOURCES = $(wildcard $(PWD)/../rtl/*.v)
 COCOTB_TOPLEVEL = $(TOP)
 COCOTB_TEST_MODULES = test_$(TOP)
 SIM_BUILD = sim_build_$(TOP)

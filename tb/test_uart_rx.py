@@ -14,15 +14,15 @@ async def reset(dut):
     await ClockCycles(dut.clk, 2)
 
 
-async def drive_byte(dut, byte, stop_bit=1):
+async def drive_byte(dut, byte, stop_bit=1, bit_time=CLKS_PER_BIT):
     """Act like a transmitter: wiggle the rx wire to send one byte."""
     dut.rx.value = 0                              # start bit
-    await ClockCycles(dut.clk, CLKS_PER_BIT)
+    await ClockCycles(dut.clk, bit_time)
     for i in range(8):                            # 8 data bits, LSB first
         dut.rx.value = (byte >> i) & 1
-        await ClockCycles(dut.clk, CLKS_PER_BIT)
+        await ClockCycles(dut.clk, bit_time)
     dut.rx.value = stop_bit                       # stop bit (normally 1)
-    await ClockCycles(dut.clk, CLKS_PER_BIT)
+    await ClockCycles(dut.clk, bit_time)
     dut.rx.value = 1                              # back to idle
 
 
@@ -88,3 +88,22 @@ async def test_glitch_ignored(dut):
     pulses = await counter
 
     assert pulses == 0, "a glitch should not produce a byte"
+
+@cocotb.test()
+async def test_baud_mismatch(dut):
+    """Receiver must tolerate a sender that is a few percent fast or slow."""
+    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    await reset(dut)
+
+    for percent in [-3, -2, 2, 3]:
+        bit_time = round(CLKS_PER_BIT / (1 + percent / 100))
+        dut._log.info(f"sender {percent:+d}% -> {bit_time} cycles per bit")
+
+        for value in [0x55, 0xAA, 0x00, 0xFF, 0x41]:
+            waiter = cocotb.start_soon(wait_for_byte(dut))
+            await drive_byte(dut, value, bit_time=bit_time)
+            got = await waiter
+            await RisingEdge(dut.clk)
+            assert got == value, \
+                f"{percent:+d}%: sent {value:#04x}, received {got:#04x}"
+            assert dut.frame_error.value == 0, f"{percent:+d}%: frame error"

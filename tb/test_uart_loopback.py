@@ -45,3 +45,28 @@ async def test_loopback(dut):
 
         while dut.tx_busy.value == 1:       # wait for TX to finish
             await RisingEdge(dut.clk)
+
+
+
+
+@cocotb.test()
+async def test_all_bytes(dut):
+    """Bytes sent by TX must come back out of RX unchanged."""
+    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    await reset(dut)
+    
+    for value in range(256):
+        waiter = cocotb.start_soon(wait_for_byte(dut))
+
+        dut.tx_data.value = value          # same as send_byte in the TX test
+        dut.tx_start.value = 1
+        await RisingEdge(dut.clk)
+        dut.tx_start.value = 0
+
+        got = await waiter
+        await RisingEdge(dut.clk)
+        assert got == value, f"sent {value:#04x}, received {got:#04x}"
+        assert dut.frame_error.value == 0, "unexpected frame error"
+
+        while dut.tx_busy.value == 1:       # wait for TX to finish
+            await RisingEdge(dut.clk)
